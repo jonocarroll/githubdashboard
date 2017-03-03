@@ -121,7 +121,8 @@ arrange(repos_df, desc(updated_at)) %>%
   select(Repository, Age=updated_at, Stars, Forks, Issues) %>%
   mutate(Age=pretty_diff(Age)) %>%
   datatable(escape=FALSE,
-            options = list(columnDefs = list(list(className = 'dt-right', targets = 2:5))))
+            options = list(columnDefs = list(list(className = 'dt-right', targets = 2:5)))) %>% 
+  formatRound(columns = 'Age', digits = 1)
 ```
 
 Row
