@@ -25,8 +25,8 @@ issues <- gh("/user/issues", .limit = Inf)
 
 ```{r dev2, echo=FALSE, include=FALSE}
 map_df(repos, ~.[c("name", "html_url", "stargazers_count", "forks_count", "has_issues",
-                   "open_issues", "updated_at")]) %>%
-  mutate(updated_at = anytime(updated_at, asUTC=TRUE)) -> repos_df
+                   "open_issues", "updated_at", "pushed_at")]) %>%
+  mutate(updated_at, updated_at = anytime(pushed_at, asUTC=TRUE)) -> repos_df
 
 map_df(issues, function(x) {
   c(list(repo_name = x$repository$full_name,
