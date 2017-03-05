@@ -7,6 +7,7 @@ output:
     vertical_layout: scroll
 ---
 ```{r setup, include=FALSE}
+library(httr)
 library(flexdashboard)
 library(gh) # devtools::install_github("r-pkgs/gh")
 library(anytime)
@@ -21,6 +22,11 @@ USER <- Sys.getenv('GITHUB_USER')
 user <- gh("/users/:user", user=USER)
 repos <- gh("/users/:user/repos", user=USER, .limit = Inf)
 issues <- gh("/user/issues", .limit = Inf)
+events <- gh("/users/:user/events", user=USER, .limit = 100)
+
+# write avatar to temp file
+avatar <- tempfile(fileext = ".png")
+GET(user$avatar_url, write_disk(avatar, overwrite=TRUE))
 ```
 
 ```{r dev2, echo=FALSE, include=FALSE}
@@ -36,13 +42,24 @@ map_df(issues, function(x) {
     x[c("html_url", "number", "state", "updated_at", "created_at", "title", "body")])
 }) %>%
   mutate(updated_at = anytime(created_at, asUTC=TRUE), created_at = NULL) -> issues_df
+
+map_df(events, function(x) {
+  c(list(created_at = x$created_at,
+         repo = x$repo$name,
+         message = ifelse(is.null(x$payload$commits[[1]]$message), NA, x$payload$commits[[1]]$message),
+         type = x$type))
+  }) %>% 
+  filter(created_at > lubridate::today() - lubridate::weeks(1)) %>% 
+  filter(type %in% c("PushEvent", "PullRequestEvent"), !grepl("auto-build", message)) %>% 
+  mutate(updated_at = anytime(created_at, asUTC=TRUE), created_at = NULL) -> commits_df
+  # mutate(updated_at = anytime(created_at, asUTC=TRUE), created_at = NULL, message = strtrim(message, 120)) -> commits_df
 ```
 
 ```{r include=FALSE}
 options(
   DT.options =
     list(
-      pageLength = 25,
+      pageLength = 10,
       language = list(search = 'Filter:'),
       dom = 'Bfrtip',
       bInfo = FALSE)
@@ -70,6 +87,11 @@ issues_df %>%
          `Submitted by` = sprintf('<a href="%s">%s</a>', user_url, user_login),
          `Issue #` = sprintf('<a href="%s">#%s</a>', html_url, number),
          Age = pretty_diff(updated_at)) -> issues_df
+
+commits_df %>%
+  mutate(Repository = sprintf('<a href="https://github.com/%s">%s</a>', repo, repo)) %>%
+  rename(Message = message, Type = type) %>%
+  select(Repository, Message, updated_at, Type) -> commits_df
 ```
 
 Overview
@@ -83,6 +105,13 @@ Row
 ```{r}
 valueBox(scales::comma(nrow(repos_df)),
          icon = "fa-github")
+```
+
+### Commits/PRs This Week
+
+```{r}
+valueBox(scales::comma(nrow(commits_df)),
+         icon = "fa-pencil-square-o")
 ```
 
 ### Open Issues
@@ -99,6 +128,11 @@ valueBox(scales::comma(sum(repos_df$Stars)),
          icon = "fa-star")
 ```
 
+### Avatar {.no-title}
+
+<!-- ![](`r avatar`) -->
+<img src="`r avatar`" width="600px" height="600px" />
+
 
 Row
 -----------------------------------------------------------------------
@@ -112,8 +146,8 @@ arrange(repos_df, desc(Stars)) %>%
   datatable(options = list(bFilter=FALSE, paging=FALSE), escape=FALSE, filter="none")
 ```
 
-Row
------------------------------------------------------------------------
+<!-- Row -->
+<!-- ----------------------------------------------------------------------- -->
 
 ### Repos by time of last activity
 
@@ -123,6 +157,19 @@ arrange(repos_df, desc(updated_at)) %>%
   mutate(Age=pretty_diff(Age)) %>%
   datatable(escape=FALSE,
             options = list(columnDefs = list(list(className = 'dt-right', targets = 2:5))))
+```
+
+Row
+-----------------------------------------------------------------------
+
+### Recent Activity (Last 7 days)
+
+```{r}
+arrange(commits_df, desc(updated_at)) %>%
+  select(Repository, Age=updated_at, everything()) %>%
+  mutate(Age=pretty_diff(Age)) %>%
+  datatable(escape=FALSE,
+            options = list(columnDefs = list(list(className = 'dt-right', targets = 2:3))))
 ```
 
 Row
